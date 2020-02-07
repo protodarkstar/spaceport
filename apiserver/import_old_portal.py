@@ -3,6 +3,7 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'apiserver.settings'
 django.setup()
 
 import datetime
+from django.utils import timezone
 from apiserver.api import models, old_models, utils
 
 MEMBER_FIELDS = [
@@ -70,7 +71,7 @@ TRAINING_FIELDS = [
     'id',
     # class_session_id -> session
     'member_id',
-    'attendance_status',
+    # attendance_status -> capitalize
     'sign_up_date',
     'paid_date',
 ]
@@ -83,6 +84,9 @@ print('Deleting all members...')
 models.Member.objects.all().delete()
 print('Importing old members...')
 old = old_models.Members.objects.using('old_portal').all()
+
+import_date = old.last().web_crawl_date.date()
+print('Using import date:', import_date)
 
 for o in old:
     new = {}
@@ -118,7 +122,11 @@ for o in old:
     new = {}
 
     for f in TRANSACTION_FIELDS:
-        new[f] = o.__dict__.get(f, None).replace('Paypal', 'PayPal')
+        tmp = o.__dict__.get(f, None)
+        if isinstance(tmp, str):
+            new[f] = tmp.replace('Paypal', 'PayPal')
+        else:
+            new[f] = tmp
 
     models.Transaction.objects.create(**new)
     print('Imported transaction #{} - {} {}'.format(
@@ -139,7 +147,6 @@ for m in members:
         continue
     if not m.current_start_date: continue
 
-    import_date = datetime.date(2020, 1, 3)
     tx, _ = utils.fake_missing_membership_months(m)
     utils.tally_membership_months(m, import_date)
     utils.gen_member_forms(m)
@@ -216,7 +223,9 @@ for o in old:
         new[f] = o.__dict__.get(f, None)
     new['course'] = models.Course.objects.get(id=o.course_id)
     new['old_instructor'] = o.instructor
-    new['datetime'] = str(o.datetime).replace('+00:00', '-07:00')
+    dt = o.datetime.replace(tzinfo=None)
+    dt = timezone.pytz.timezone('America/Edmonton').localize(dt)
+    new['datetime'] = dt.astimezone(timezone.pytz.UTC)
 
     models.Session.objects.create(**new)
     print('Imported session #{} - {} {}'.format(
@@ -235,6 +244,7 @@ for o in old:
     for f in TRAINING_FIELDS:
         new[f] = o.__dict__.get(f, None)
     new['session'] = models.Session.objects.get(id=o.class_session_id)
+    new['attendance_status'] = o.attendance_status.capitalize()
 
     models.Training.objects.create(**new)
     print('Imported training #{} - {} {}'.format(

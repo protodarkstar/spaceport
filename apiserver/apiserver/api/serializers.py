@@ -5,6 +5,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueValidator
 from rest_auth.registration.serializers import RegisterSerializer
 from rest_auth.serializers import UserDetailsSerializer
+import re
 
 from . import models, fields, utils
 from .. import settings
@@ -241,12 +242,12 @@ class CardSerializer(serializers.ModelSerializer):
 
 class TrainingSerializer(serializers.ModelSerializer):
     attendance_status = serializers.ChoiceField([
-        'waiting for payment',
-        'withdrawn',
-        'rescheduled',
-        'no-show',
-        'attended',
-        'confirmed'
+        'Waiting for payment',
+        'Withdrawn',
+        'Rescheduled',
+        'No-show',
+        'Attended',
+        'Confirmed'
     ])
     session = serializers.PrimaryKeyRelatedField(queryset=models.Session.objects.all())
     student_name = serializers.SerializerMethodField()
@@ -265,7 +266,7 @@ class TrainingSerializer(serializers.ModelSerializer):
 
 
 class StudentTrainingSerializer(TrainingSerializer):
-    attendance_status = serializers.ChoiceField(['waiting for payment', 'withdrawn'])
+    attendance_status = serializers.ChoiceField(['Waiting for payment', 'Withdrawn'])
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -282,7 +283,7 @@ class SessionSerializer(serializers.ModelSerializer):
         read_only_fields = ['old_instructor', 'instructor']
 
     def get_student_count(self, obj):
-        return len([x for x in obj.students.all() if x.attendance_status != 'withdrawn'])
+        return len([x for x in obj.students.all() if x.attendance_status != 'Withdrawn'])
 
     def get_course_name(self, obj):
         return obj.course.name
@@ -350,6 +351,11 @@ class RegistrationSerializer(RegisterSerializer):
     first_name = serializers.CharField(max_length=32)
     last_name = serializers.CharField(max_length=32)
     existing_member = serializers.ChoiceField(['true', 'false'])
+
+    def validate_username(self, username):
+        if re.search(r'[^a-z.]', username):
+            raise ValidationError('Invalid characters.')
+        return super().validate_username(username)
 
     def custom_signup(self, request, user):
         data = request.data
